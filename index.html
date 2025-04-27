@@ -1,28 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Todo List</title>
-    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo List</title>
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <script src="https://unpkg.com/htmx.org@1.9.2"></script>
 </head>
-<body>
-    <div class="w3-container">
-        <h2>Todo List</h2>
-        <form hx-post="/todos" hx-target="#todo-list" hx-swap="outerHTML" class="w3-container">
-            <input type="text" name="title" placeholder="New Todo" class="w3-input">
-            <button type="submit" class="w3-button w3-green">Add</button>
-        </form>
-        <ul id="todo-list" class="w3-ul w3-card-4">
-            <!-- Todos will be loaded here -->
-        </ul>
-    </div>
+<body class="w3-light-grey">
 
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            htmx.ajax('GET', '/todos', '#todo-list', 'outerHTML');
-        });
-    </script>
+  <div class="w3-container w3-margin-top">
+    <h2 class="w3-center">Todo List</h2>
+
+    <form id="todo-form" class="w3-container w3-margin-bottom">
+      <input type="text" id="title" name="title" placeholder="New Todo" required class="w3-input w3-margin-bottom">
+      <button type="submit" class="w3-button w3-green w3-block">Add Todo</button>
+    </form>
+
+    <ul id="todo-list" class="w3-ul w3-card-4 w3-white">
+      <!-- Todos will be loaded here -->
+    </ul>
+  </div>
+
+  <script>
+    function fetchTodos() {
+      fetch('/api/todos')
+        .then(res => res.json())
+        .then(todos => {
+          const list = document.getElementById('todo-list');
+          list.innerHTML = todos.map(todo => `
+            <li class="w3-bar">
+              <div class="w3-bar-item">
+                <span class="${todo.done ? 'w3-text-grey' : ''}">
+                  ${todo.title}
+                </span>
+              </div>
+              <div class="w3-bar-item w3-right">
+                <button class="w3-button w3-tiny w3-blue" onclick="toggleDone(${todo.id}, ${!todo.done})">Done</button>
+                <button class="w3-button w3-tiny w3-red" onclick="deleteTodo(${todo.id})">Delete</button>
+              </div>
+            </li>
+          `).join('');
+        })
+        .catch(err => console.error('Error loading todos:', err));
+    }
+
+    function addTodo(title) {
+      fetch('/api/todos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title, done: false })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to add todo');
+        return response.json();
+      })
+      .then(todo => {
+        document.getElementById('title').value = '';
+        fetchTodos();
+      })
+      .catch(err => console.error('Error adding todo:', err));
+    }
+
+    function toggleDone(id, done) {
+      fetch(`/api/todos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id, title: "", done: done })
+      })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to update todo');
+        fetchTodos();
+      })
+      .catch(err => console.error('Error updating todo:', err));
+    }
+
+    function deleteTodo(id) {
+      fetch(`/api/todos/${id}`, {
+        method: 'DELETE'
+      })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to delete todo');
+        fetchTodos();
+      })
+      .catch(err => console.error('Error deleting todo:', err));
+    }
+
+    document.getElementById('todo-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const title = document.getElementById('title').value.trim();
+      if (title) {
+        addTodo(title);
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', fetchTodos);
+  </script>
+
 </body>
 </html>

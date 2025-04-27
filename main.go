@@ -17,15 +17,17 @@ type Todo struct {
 	Done  bool   `json:"done"`
 }
 
-var todos = []Todo{
-	{ID: 1, Title: "Learn Go", Done: false},
-	{ID: 2, Title: "Learn Chi", Done: false},
-}
+var (
+	todos  = []Todo{{ID: 1, Title: "Learn Go", Done: false}, {ID: 2, Title: "Learn Chi", Done: false}}
+	nextID = 3
+)
 
 func main() {
 	r := chi.NewRouter()
 
-	// Enable CORS
+	// Middleware
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -35,59 +37,90 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Middleware
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	// Static file server
+	fileServer := http.FileServer(http.Dir("./"))
+	r.Handle("/", fileServer)
+	r.Handle("/*", fileServer)
 
-	// Serve static files
-	r.Get("/", http.FileServer(http.Dir("./")).ServeHTTP)
-	r.Get("/*", http.FileServer(http.Dir("./")).ServeHTTP)
+	// API routes
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/todos", getTodos)
+		r.Post("/todos", createTodo)
+		r.Put("/todos/{id}", updateTodo)
+		r.Delete("/todos/{id}", deleteTodo)
+	})
 
-	// API endpoints
-	r.Get("/todos", getTodos)
-	r.Post("/todos", createTodo)
-	r.Put("/todos/{id}", updateTodo)
-	r.Delete("/todos/{id}", deleteTodo)
-
-	log.Println("Starting server at :8080")
+	log.Println("Server started at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
 func getTodos(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(todos)
+	respondJSON(w, http.StatusOK, todos)
 }
 
 func createTodo(w http.ResponseWriter, r *http.Request) {
 	var todo Todo
-	json.NewDecoder(r.Body).Decode(&todo)
-	todo.ID = len(todos) + 1
+	if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	todo.ID = nextID
+	nextID++
 	todos = append(todos, todo)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(todo)
+
+	respondJSON(w, http.StatusCreated, todo)
 }
 
 func updateTodo(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
-	var todo Todo
-	json.NewDecoder(r.Body).Decode(&todo)
+	idParam := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	var updatedTodo Todo
+	if err := json.NewDecoder(r.Body).Decode(&updatedTodo); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	updatedTodo.ID = id // ensure ID consistency
+
 	for i, t := range todos {
 		if t.ID == id {
-			todos[i] = todo
-			break
+			todos[i] = updatedTodo
+			respondJSON(w, http.StatusOK, updatedTodo)
+			return
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(todo)
+
+	http.Error(w, "Todo not found", http.StatusNotFound)
 }
 
 func deleteTodo(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(chi.URLParam(r, "id"))
+	idParam := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idParam)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
 	for i, t := range todos {
 		if t.ID == id {
 			todos = append(todos[:i], todos[i+1:]...)
-			break
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
 	}
-	w.WriteHeader(http.StatusNoContent)
+
+	http.Error(w, "Todo not found", http.StatusNotFound)
+}
+
+// Helper function
+func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if payload != nil {
+		json.NewEncoder(w).Encode(payload)
+	}
 }
