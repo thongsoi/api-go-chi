@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List</title>
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+</head>
+<body>
+    <div class="w3-container">
+        <h2>Todo List</h2>
+        <form hx-post="/todos" hx-target="#todo-list" hx-swap="outerHTML" class="w3-container">
+            <input type="text" name="title" placeholder="New Todo" class="w3-input">
+            <button type="submit" class="w3-button w3-green">Add</button>
+        </form>
+        <ul id="todo-list" class="w3-ul w3-card-4">
+            <!-- Todos will be loaded here -->
+        </ul>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            htmx.ajax('GET', '/todos', '#todo-list', 'outerHTML');
+        });
+    </script>
+</body>
+</html>
